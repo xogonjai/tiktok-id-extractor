@@ -14,8 +14,8 @@ Supports URLs like `https://www.tiktok.com/view/product/1729543202963821377?...`
 **Note**: If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown. Use manual instructions if needed.
 """)
 
-# Input field for TikTok Shop URL
-short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/view/product/1729543202963821377?...", value="https://www.tiktok.com/view/product/1729543202963821377", key="url_input")
+# Input field for TikTok Shop URL (blank by default)
+short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/view/product/1729543202963821377?...", key="url_input")
 
 # Checkout URL template (provided by user)
 checkout_url_template = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[]&product_id=[]&quantity=1&seller_id=[]"
