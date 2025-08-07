@@ -8,8 +8,8 @@ st.set_page_config(page_title="TikTok Shop ID Extractor", page_icon="🛒", layo
 # App title and description
 st.title("🛒 TikTok Shop ID Extractor")
 st.markdown("""
-Enter a TikTok Shop URL (shortened or product page) to extract the **Product ID** and all **SKU IDs** (for variants like size or color).  
-The app generates a clickable checkout URL for **each SKU ID**.  
+Enter a TikTok Shop URL (shortened or product page) to extract the **Product ID** and all **unique SKU IDs** (for variants like size or color).  
+The app generates a clickable checkout URL for **each unique SKU ID** (no duplicates).  
 Supports URLs like `https://www.tiktok.com/t/ZP8kbRubf/`.  
 **Note**: If multiple SKU IDs are found, all checkout URLs are listed. Use manual instructions if needed.
 """)
@@ -62,9 +62,9 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
             response.raise_for_status()
             text = response.text
 
-        # Search for SKU IDs in page source
+        # Search for SKU IDs in page source and deduplicate
         sku_id_pattern = r'sku_id"\s*:\s*"(\d+)"'
-        sku_ids = re.findall(sku_id_pattern, text)
+        sku_ids = list(set(re.findall(sku_id_pattern, text)))  # Use set to remove duplicates
         if sku_id_url and sku_id_url not in sku_ids:
             sku_ids.append(sku_id_url)  # Include SKU ID from URL if not in page source
 
@@ -80,15 +80,15 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
             st.warning("**Product ID**: Not found in URL or page source.")
 
         if sku_ids:
-            st.write(f"**SKU IDs Found**: {', '.join(sku_ids)}")
+            st.write(f"**Unique SKU IDs Found**: {', '.join(sku_ids)}")
             if len(sku_ids) > 1:
-                st.info("**Note**: Multiple SKU IDs detected (likely due to variants like size or color). All checkout URLs are listed below.")
+                st.info("**Note**: Multiple unique SKU IDs detected (likely due to variants like size or color). All checkout URLs are listed below.")
         elif sku_id_url:
             st.write(f"**SKU ID (from URL)**: {sku_id_url}")
         else:
             st.warning("**SKU ID**: Not found in page source or URL.")
 
-        # Generate clickable checkout URLs for each SKU ID
+        # Generate clickable checkout URLs for each unique SKU ID
         filled_urls = []
         if product_id and sku_ids:
             st.subheader("Filled Checkout URLs")
@@ -148,7 +148,7 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
 st.markdown("---")
 st.subheader("Manual Instructions for Products with Variants")
 st.markdown("""
-If the app cannot fetch all **SKU IDs** or you need a specific variant (e.g., size, color):
+If the app cannot fetch all **unique SKU IDs** or you need a specific variant (e.g., size, color):
 1. **Resolve Shortened URL**:
    - Open the URL (e.g., https://www.tiktok.com/t/ZP8kbRubf/) in Chrome or Safari on your phone.
    - Note the final URL (e.g., https://www.tiktok.com/view/product/[number]).
