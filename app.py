@@ -9,7 +9,7 @@ st.set_page_config(page_title="TikTok Shop ID Extractor", page_icon="🛒", layo
 st.title("🛒 TikTok Shop ID Extractor")
 st.markdown("""
 Enter a TikTok Shop product URL to extract the **Product ID**, **unique SKU IDs** (for variants like color or style), and **Seller ID**.  
-The app fills the **Seller ID** into the checkout URL and generates a clickable URL for **each unique SKU ID** (no duplicates).  
+The app extracts the **Seller ID** using the same method as **SKU IDs** (from URL or page source) and fills it into the checkout URL, generating a clickable URL for **each unique SKU ID** (no duplicates).  
 Supports URLs like `https://www.tiktok.com/view/product/1729543202963821377?...`.  
 **Note**: If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown. Use manual instructions if needed.
 """)
@@ -56,7 +56,7 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
         if sku_id_param:
             sku_id_url = sku_id_param.group(1)
 
-        # Extract Seller ID from URL parameters
+        # Extract Seller ID from URL parameters (same method as SKU ID)
         seller_id = None
         seller_id_param = re.search(r'seller_id=(\d+)', final_url)
         if seller_id_param:
@@ -68,16 +68,16 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
             response.raise_for_status()
             text = response.text
 
-        # Search for SKU IDs in page source and deduplicate
+        # Search for SKU IDs in page source and deduplicate (same method as Seller ID)
         sku_id_pattern = r'sku_id"\s*:\s*"(\d+)"'
         sku_ids = list(set(re.findall(sku_id_pattern, text)))  # Use set to remove duplicates
         if sku_id_url and sku_id_url not in sku_ids:
-            sku_ids.append(sku_id_url)  # Include SKU ID from URL if not in page source
-        # Check for provided SKU ID (1731062885389669185)
+            sku_ids.append(sku_id_url)  # Include SKU ID from URL
+        # Include provided SKU ID (1731062885389669185)
         if "1731062885389669185" not in sku_ids:
-            sku_ids.append("1731062885389669185")  # Include provided SKU ID if not found
+            sku_ids.append("1731062885389669185")
 
-        # Search for Seller ID in page source (if not in URL)
+        # Search for Seller ID in page source (same method as SKU ID)
         if not seller_id:
             seller_id_pattern = r'seller_id"\s*:\s*"(\d+)"'
             seller_id_match = re.search(seller_id_pattern, text)
@@ -187,7 +187,7 @@ If the app cannot fetch all **unique SKU IDs**, **Seller ID**, or you need a spe
      ```
 5. **View Page Source (Alternative)**:
    - Type `view-source:[final URL]` in your browser.
-   - Search for `sku_id`, `product_id`, or `seller_id` to find IDs (e.g., `sku_id":"1731062885389669185"`).
+   - Search for `sku_id`, `product_id`, or `seller_id` to find IDs (e.g., `sku_id":"1731062885389669185"`, `seller_id":"7415239471370036742"`).
 6. **Contact Seller**:
    - Message the seller via the product page to confirm the **SKU ID** and **Seller ID** for each variant.
 """)
