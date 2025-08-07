@@ -9,7 +9,7 @@ st.set_page_config(page_title="TikTok Shop ID Extractor", page_icon="🛒", layo
 st.title("🛒 TikTok Shop ID Extractor")
 st.markdown("""
 Enter a TikTok Shop URL (shortened or product page) to extract the **Product ID** and **SKU ID**, 
-and generate a filled checkout URL. Supports URLs like `https://www.tiktok.com/t/ZP8kbRubf/`.  
+and generate a clickable checkout URL. Supports URLs like `https://www.tiktok.com/t/ZP8kbRubf/`.  
 **Note**: For products with variants (e.g., size, color), select the desired variant or follow manual instructions.
 """)
 
@@ -97,16 +97,18 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
             if default_sku_id == "1729648752805187592":
                 st.success("**Confirmed**: SKU ID matches previously provided value 1729648752805187592")
 
-        # Fill the checkout URL
+        # Fill the checkout URL and make it clickable
         if product_id and selected_sku_id:
             filled_url = checkout_url_template.replace('sku_id=[]', f'sku_id={selected_sku_id}').replace('product_id=[]', f'product_id={product_id}')
-            st.write(f"**Filled Checkout URL**:")
-            st.code(filled_url, language="text")
+            st.write("**Filled Checkout URL**:")
+            st.markdown(f'<a href="{filled_url}" target="_blank">Click here to open checkout URL</a>', unsafe_allow_html=True)
+            st.code(filled_url, language="text")  # Display raw URL as fallback
         else:
             st.error("**Cannot fill checkout URL**: Missing Product ID or SKU ID.")
             if product_id:
                 partial_url = checkout_url_template.replace('product_id=[]', f'product_id={product_id}').replace('sku_id=[]', f'sku_id={product_id}')
-                st.write(f"**Partially Filled Checkout URL** (using Product ID as fallback):")
+                st.write("**Partially Filled Checkout URL** (using Product ID as fallback):")
+                st.markdown(f'<a href="{partial_url}" target="_blank">Click here to open partial checkout URL</a>', unsafe_allow_html=True)
                 st.code(partial_url, language="text")
 
         return product_id, selected_sku_id, filled_url if product_id and selected_sku_id else None, sku_ids
@@ -124,7 +126,8 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
         if product_id:
             st.write(f"**Product ID**: {product_id}")
             partial_url = checkout_url_template.replace('product_id=[]', f'product_id={product_id}').replace('sku_id=[]', f'sku_id={product_id}')
-            st.write(f"**Partially Filled Checkout URL** (using Product ID as fallback):")
+            st.write("**Partially Filled Checkout URL** (using Product ID as fallback):")
+            st.markdown(f'<a href="{partial_url}" target="_blank">Click here to open partial checkout URL</a>', unsafe_allow_html=True)
             st.code(partial_url, language="text")
         if sku_id_url:
             st.write(f"**SKU ID (from URL)**: {sku_id_url}")
@@ -150,7 +153,7 @@ If the app cannot fetch the correct **SKU ID** or you need a specific variant (e
    - Copy the checkout URL, which includes `sku_id=[number]` and `product_id=[number]`.
    - Example: `sku_id=123456789012&product_id=123456789`.
 4. **Fill Checkout URL**:
-   - Replace `sku_id=[]` and `product_id=[]` in the template with the extracted IDs:
+   - Replace `sku_id=[]` and `product_id=[]` in the template:
      ```
      https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=1&seller_id=7495316114727995400
      ```
