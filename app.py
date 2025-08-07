@@ -9,12 +9,12 @@ st.set_page_config(page_title="TikTok Shop ID Extractor", page_icon="🛒", layo
 st.title("🛒 TikTok Shop ID Extractor")
 st.markdown("""
 Enter a TikTok Shop URL (shortened or product page) to extract the **Product ID** and **SKU ID**, 
-and generate a filled checkout URL. Supports URLs like `https://www.tiktok.com/t/ZP8kqPRcB/` or 
-`https://www.tiktok.com/view/product/[number]`.
+and generate a filled checkout URL. Supports URLs like `https://www.tiktok.com/t/ZP8kbRubf/`.  
+**Note**: For products with variants (e.g., size, color), select the desired variant or follow manual instructions.
 """)
 
 # Input field for TikTok Shop URL
-short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/t/ZP8kqPRcB/", key="url_input")
+short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/t/ZP8kbRubf/", key="url_input")
 
 # Checkout URL template
 checkout_url_template = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[]&product_id=[]&quantity=1&seller_id=7495316114727995400"
@@ -23,7 +23,7 @@ checkout_url_template = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/
 def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
     if not short_url:
         st.warning("Please enter a valid TikTok Shop URL.")
-        return None, None, None
+        return None, None, None, []
 
     try:
         # Set headers to mimic a mobile browser
@@ -61,12 +61,12 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
             response.raise_for_status()
             text = response.text
 
-        # Search for SKU ID in page source
+        # Search for SKU IDs in page source
         sku_id_pattern = r'sku_id"\s*:\s*"(\d+)"'
         sku_ids = re.findall(sku_id_pattern, text)
 
         # Select SKU ID (URL parameter > page source > Product ID)
-        sku_id = sku_id_url or (sku_ids[0] if sku_ids else product_id)
+        default_sku_id = sku_id_url or (sku_ids[0] if sku_ids else product_id)
 
         # Display results
         st.subheader("Results")
@@ -76,18 +76,30 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
         else:
             st.warning("**Product ID**: Not found in URL or page source.")
 
-        if sku_id:
-            st.write(f"**SKU ID**: {sku_id}")
-            if sku_id == product_id:
-                st.info("**Note**: SKU ID matches Product ID (single variant likely)")
-            if sku_id == "1729648752805187592":
-                st.success("**Confirmed**: SKU ID matches previously provided value 1729648752805187592")
+        if sku_ids:
+            st.write(f"**SKU IDs Found**: {', '.join(sku_ids)}")
+            if len(sku_ids) > 1:
+                st.info("**Note**: Multiple SKU IDs detected (likely due to variants like size or color). Select a variant below.")
+        elif sku_id_url:
+            st.write(f"**SKU ID (from URL)**: {sku_id_url}")
         else:
             st.warning("**SKU ID**: Not found in page source or URL.")
 
+        # Variant selection
+        selected_sku_id = default_sku_id
+        if sku_ids and len(sku_ids) > 1:
+            selected_sku_id = st.selectbox("Select a SKU ID (variant):", sku_ids, index=0, key="sku_select")
+            st.write(f"**Selected SKU ID**: {selected_sku_id}")
+        elif default_sku_id:
+            st.write(f"**Selected SKU ID**: {default_sku_id}")
+            if default_sku_id == product_id:
+                st.info("**Note**: SKU ID matches Product ID (single variant likely)")
+            if default_sku_id == "1729648752805187592":
+                st.success("**Confirmed**: SKU ID matches previously provided value 1729648752805187592")
+
         # Fill the checkout URL
-        if product_id and sku_id:
-            filled_url = checkout_url_template.replace('sku_id=[]', f'sku_id={sku_id}').replace('product_id=[]', f'product_id={product_id}')
+        if product_id and selected_sku_id:
+            filled_url = checkout_url_template.replace('sku_id=[]', f'sku_id={selected_sku_id}').replace('product_id=[]', f'product_id={product_id}')
             st.write(f"**Filled Checkout URL**:")
             st.code(filled_url, language="text")
         else:
@@ -97,7 +109,7 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
                 st.write(f"**Partially Filled Checkout URL** (using Product ID as fallback):")
                 st.code(partial_url, language="text")
 
-        return product_id, sku_id, filled_url if product_id and sku_id else None
+        return product_id, selected_sku_id, filled_url if product_id and selected_sku_id else None, sku_ids
 
     except requests.RequestException as e:
         st.error(f"**Error fetching page**: {e}")
@@ -105,7 +117,7 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
         **Note**: TikTok may require authentication, JavaScript rendering, or block automated requests.  
         **Try these steps**:
         1. Log into TikTok Shop in your browser and retry.
-        2. Manually open the URL, add the product to cart, and check the checkout URL for `sku_id` and `product_id`.
+        2. Manually open the URL, select a variant (e.g., size, color), add to cart, and check the checkout URL for `sku_id` and `product_id`.
         3. Use the browser's 'View Page Source' (`view-source:[URL]`) and search for `sku_id` or `product_id`.
         4. Contact the seller to confirm IDs.
         """)
@@ -116,28 +128,35 @@ def extract_and_fill_tiktok_ids(short_url, checkout_url_template):
             st.code(partial_url, language="text")
         if sku_id_url:
             st.write(f"**SKU ID (from URL)**: {sku_id_url}")
-        return product_id, sku_id_url, None
+        return product_id, sku_id_url, None, []
 
 # Run the extraction when the user clicks the button
 if st.button("Extract IDs and Fill Checkout URL", key="extract_button"):
-    extract_and_fill_tiktok_ids(short_url, checkout_url_template)
+    product_id, sku_id, filled_url, sku_ids = extract_and_fill_tiktok_ids(short_url, checkout_url_template)
 
-# Manual instructions
+# Manual instructions for variant selection
 st.markdown("---")
-st.subheader("Manual Instructions (if app fails)")
+st.subheader("Manual Instructions for Products with Variants")
 st.markdown("""
-If the app cannot fetch the IDs due to TikTok restrictions:
+If the app cannot fetch the correct **SKU ID** or you need a specific variant (e.g., size, color):
 1. **Resolve Shortened URL**:
-   - Open the URL (e.g., https://www.tiktok.com/t/ZP8kqPRcB/) in Chrome or Safari.
+   - Open the URL (e.g., https://www.tiktok.com/t/ZP8kbRubf/) in Chrome or Safari on your phone.
    - Note the final URL (e.g., https://www.tiktok.com/view/product/[number]).
 2. **Find Product ID**:
-   - Look for `/product/[number]` in the URL (e.g., `123456789` is the Product ID).
-3. **Find SKU ID**:
-   - On the product page, select a variant (e.g., size, color) and add to cart.
-   - Check the checkout URL for `sku_id=[number]` and `product_id=[number]`.
-   - Or, type `view-source:[final URL]` in the browser and search for `sku_id`.
+   - Look for `/product/[number]` in the URL (e.g., `123456789` is the **Product ID**).
+3. **Find SKU ID for Specific Variant**:
+   - On the product page in the TikTok app or browser, select the desired variant (e.g., size, color).
+   - Tap "Add to Cart" or "Buy Now" and proceed to checkout.
+   - Copy the checkout URL, which includes `sku_id=[number]` and `product_id=[number]`.
+   - Example: `sku_id=123456789012&product_id=123456789`.
 4. **Fill Checkout URL**:
-   - Replace `sku_id=[]` and `product_id=[]` in the template with the extracted IDs.
-5. **Contact Seller**:
-   - Message the seller via the product page to confirm IDs.
+   - Replace `sku_id=[]` and `product_id=[]` in the template with the extracted IDs:
+     ```
+     https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=1&seller_id=7495316114727995400
+     ```
+5. **View Page Source (Alternative)**:
+   - Type `view-source:[final URL]` in your browser.
+   - Search for `sku_id` to find all variant IDs (e.g., `sku_id":"123456789012"`).
+6. **Contact Seller**:
+   - Message the seller via the product page to confirm the **SKU ID** for your desired variant.
 """)
