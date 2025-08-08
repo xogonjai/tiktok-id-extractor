@@ -75,13 +75,13 @@ def extract_and_fill_tiktok_ids(short_url):
 
         # Search for Seller ID in page source (if not in URL)
         if not seller_id:
-            seller_id_pattern = r'(?:"seller_id"|"sellerId"|"shop_id"|"merchant_id")\s*:\s*"(\d+)"'
+            seller_id_pattern = r'(?:"seller_id"|"sellerId"|"shop_id"|"merchant_id"|"store_id")\s*:\s*"(\d+)"'
             seller_id_match = re.search(seller_id_pattern, text)
             if seller_id_match:
                 seller_id = seller_id_match.group(1)
             else:
                 st.warning("Seller ID not found in page source. Final URL: " + final_url)
-                st.code(text[:1000], language="html")  # Debug: Show first 1000 characters
+                st.code(text[:1500], language="html")  # Debug: Show first 1500 characters
 
         # Default SKU ID
         default_sku_id = sku_id_url or (sku_ids[0] if sku_ids else product_id)
@@ -101,26 +101,28 @@ def extract_and_fill_tiktok_ids(short_url):
     except requests.HTTPError as e:
         st.error(f"HTTP error occurred: {str(e)}")
         if e.response.status_code == 403:
-            st.warning("Access denied (403). TikTok may require authentication or block automated requests.")
+            st.warning("Access denied (403). TikTok may require authentication or block automated requests. Try a different browser or device.")
         elif e.response.status_code == 429:
             st.warning("Too many requests (429). Please try again later.")
-        st.info("Try opening the URL in a browser, adding the product to cart, and checking the checkout URL for `seller_id`. Alternatively, use `view-source:[URL]` to search for `seller_id`, `shop_id`, or `merchant_id`.")
+        st.info("""
+            Try these steps:
+            - Open the URL in a browser, add the product to cart, and check the checkout URL for `seller_id`.
+            - Use `view-source:[URL]` in your browser and search for `seller_id`, `shop_id`, `merchant_id`, or `store_id`.
+            - Log into TikTok Shop and retry the URL.
+            - Contact the seller for confirmation.
+        """)
         if 'text' in locals():
-            st.code(text[:1000], language="html")  # Debug: Show page source sample
+            st.code(text[:1500], language="html")  # Debug: Show page source sample
+        return None, [], [], None, None
     except requests.Timeout:
         st.error("Request timed out. TikTok servers may be slow or unreachable.")
+        return None, [], [], None, None
     except requests.RequestException as e:
         st.error(f"Error fetching page: {str(e)}")
+        return None, [], [], None, None
     except Exception as e:
         st.error(f"Unexpected error: {str(e)}")
-    st.markdown("""
-    **Troubleshooting**:
-    - Log into TikTok Shop in your browser and retry.
-    - Open the URL, select a variant, add to cart, and check the checkout URL for IDs.
-    - Use `view-source:[URL]` in your browser and search for `sku_id`, `product_id`, `seller_id`, `shop_id`, or `merchant_id`.
-    - Contact the seller for confirmation.
-    """)
-    return product_id, sku_ids, filled_urls, default_sku_id, seller_id
+        return None, [], [], None, None
 
 # Input field and button
 short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/view/product/1729543202963821377?...", key="url_input")
@@ -138,7 +140,13 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
         st.write(f"**Seller ID**: {seller_id}")
     else:
         st.warning("**Seller ID**: Not found in URL or page source. Checkout URLs may be incomplete.")
-        st.info("Try opening the URL in a browser, adding the product to cart, and checking the checkout URL for `seller_id`. Alternatively, use `view-source:[URL]` to search for `seller_id`, `shop_id`, or `merchant_id`.")
+        st.info("""
+            Try these steps:
+            - Open the URL in a browser, add the product to cart, and check the checkout URL for `seller_id`.
+            - Use `view-source:[URL]` in your browser and search for `seller_id`, `shop_id`, `merchant_id`, or `store_id`.
+            - Log into TikTok Shop and retry the URL.
+            - Contact the seller for confirmation.
+        """)
 
     if sku_ids:
         st.write(f"**Unique SKU IDs Found**: {', '.join(sku_ids)}")
@@ -153,7 +161,7 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
     # Display checkout URLs
     if filled_urls:
         st.subheader("Filled Checkout URLs")
-        if len(filled_urls) > 1:
+        if len(sku_ids) > 1:
             for idx, filled_url in enumerate(filled_urls, 1):
                 sku_id = sku_ids[idx-1]
                 st.write(f"**Checkout URL for SKU ID {sku_id} (Variant {idx})**:")
@@ -178,24 +186,25 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
 # Collapsible manual instructions
 with st.expander("Manual Instructions for Products with Variants"):
     st.markdown("""
-    If the app cannot fetch **unique SKU IDs** or **Seller ID**:
-    1. **Resolve Product URL**:
-       - Open the URL (e.g., https://www.tiktok.com/view/product/1729543202963821377?...) in Chrome or Safari.
-       - Note the final URL if it redirects.
-    2. **Find Product ID**:
-       - Look for `/product/[number]` in the URL (e.g., `1729543202963821377` is the **Product ID**).
-    3. **Find SKU ID and Seller ID**:
-       - Open the product page in the TikTok app or browser.
-       - Select each variant (e.g., color, style), tap "Add to Cart" or "Buy Now," and proceed to checkout.
-       - Copy the checkout URL, which includes `sku_id=[number]`, `product_id=[number]`, and `seller_id=[number]`.
-       - Example: `sku_id=1729543202963821500&product_id=1729543202963821377&seller_id=7415239471370036742`.
-    4. **Fill Checkout URL**:
-       - Replace `sku_id=[]`, `product_id=[]`, and `seller_id={}` in the template:
-         ```
-         https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=1&seller_id=[SELLER_ID]
-         ```
-    5. **View Page Source (Alternative)**:
-       - Type `view-source:[URL]` in your browser.
-       - Search for `sku_id`, `product_id`, `seller_id`, `shop_id`, or `merchant_id`.
-    6. **Contact Seller**:
-       - Message the seller via the product page
+        If the app cannot fetch **unique SKU IDs** or **Seller ID**:
+        1. **Resolve Product URL**:
+           - Open the URL (e.g., https://www.tiktok.com/view/product/1729543202963821377?...) in Chrome or Safari.
+           - Note the final URL if it redirects.
+        2. **Find Product ID**:
+           - Look for `/product/[number]` in the URL (e.g., `1729543202963821377` is the **Product ID**).
+        3. **Find SKU ID and Seller ID**:
+           - Open the product page in the TikTok app or browser.
+           - Select each variant (e.g., color, style), tap "Add to Cart" or "Buy Now," and proceed to checkout.
+           - Copy the checkout URL, which includes `sku_id=[number]`, `product_id=[number]`, and `seller_id=[number]`.
+           - Example: `sku_id=1729543202963821500&product_id=1729543202963821377&seller_id=7415239471370036742`.
+        4. **Fill Checkout URL**:
+           - Replace `sku_id=[]`, `product_id=[]`, and `seller_id={}` in the template:
+             ```
+             https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=1&seller_id=[SELLER_ID]
+             ```
+        5. **View Page Source (Alternative)**:
+           - Type `view-source:[URL]` in your browser.
+           - Search for `sku_id`, `product_id`, `seller_id`, `shop_id`, `merchant_id`, or `store_id`.
+        6. **Contact Seller**:
+           - Message the seller via the product page to confirm **SKU ID** and **Seller ID**.
+    """)
