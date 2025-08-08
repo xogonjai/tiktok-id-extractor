@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import re
-import time
 
 # Streamlit app configuration
 st.set_page_config(page_title="TikTok Shop ID Extractor", page_icon="🛒", layout="centered")
@@ -18,17 +17,16 @@ Supported URLs: `https://www.tiktok.com/view/product/1729543202963821377?...`.
 # Checkout URL template
 CHECKOUT_URL_TEMPLATE = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[]&product_id=[]&quantity=1&seller_id={}"
 
-# Cache the extraction results to avoid redundant requests
-@st.cache_data(show_spinner=False)
-def extract_and_fill_tiktok_ids(short_url, _retry_count=2):
+# Function to extract IDs and generate checkout URLs
+def extract_and_fill_tiktok_ids(short_url):
     if not short_url:
         st.warning("Please enter a valid TikTok Shop URL.")
-        return None, [], None, [], None
+        return None, [], [], [], None
 
-    # Validate URL format
-    if not re.match(r'^https?://(www\.)?tiktok\.com/view/product/\d+', short_url):
-        st.error("Invalid URL format. Please provide a TikTok Shop product URL (e.g., https://www.tiktok.com/view/product/1729543202963821377?...).")
-        return None, [], None, [], None
+    # Basic URL validation
+    if not short_url.startswith(('http://', 'https://')) or 'tiktok.com' not in short_url:
+        st.error("Invalid URL. Please provide a TikTok Shop URL (e.g., https://www.tiktok.com/view/product/...).")
+        return None, [], [], [], None
 
     try:
         # Set headers to mimic a mobile browser
@@ -37,19 +35,11 @@ def extract_and_fill_tiktok_ids(short_url, _retry_count=2):
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
         }
 
-        # Fetch page content with retries
+        # Resolve URL and fetch content
         with st.spinner("Fetching TikTok Shop data..."):
             session = requests.Session()
-            for attempt in range(_retry_count):
-                try:
-                    response = session.get(short_url, headers=headers, allow_redirects=True, timeout=10)
-                    response.raise_for_status()
-                    break
-                except requests.RequestException as e:
-                    if attempt == _retry_count - 1:
-                        raise e
-                    time.sleep(2)  # Wait before retrying
-
+            response = session.get(short_url, headers=headers, allow_redirects=True, timeout=10)
+            response.raise_for_status()
             final_url = response.url
             text = response.text
 
@@ -91,112 +81,111 @@ def extract_and_fill_tiktok_ids(short_url, _retry_count=2):
         # Default SKU ID
         default_sku_id = sku_id_url or (sku_ids[0] if sku_ids else product_id)
 
-        return product_id, sku_ids, default_sku_id, seller_id, final_url
+        # Generate checkout URLs
+        filled_urls = []
+        if product_id and default_sku_id and seller_id:
+            if len(sku_ids) > 1:
+                for sku_id in sku_ids:
+                    filled_url = CHECKOUT_URL_TEMPLATE.format(seller_id).replace('sku_id=[]', f'sku_id={sku_id}').replace('product_id=[]', f'product_id={product_id}')
+                    filled_urls.append(filled_url)
+            else:
+                filled_url = CHECKOUT_URL_TEMPLATE.format(seller_id).replace('sku_id=[]', f'sku_id={default_sku_id}').replace('product_id=[]', f'product_id={product_id}')
+                filled_urls.append(filled_url)
+
+        return product_id, sku_ids, filled_urls, sku_ids, seller_id
 
     except requests.HTTPError as e:
+        st.error(f"HTTP error occurred: {str(e)}")
         if e.response.status_code == 403:
-            st.error("Access denied (HTTP 403). TikTok may be blocking automated requests or requiring authentication.")
+            st.warning("Access denied (403). TikTok may require authentication or block automated requests.")
         elif e.response.status_code == 429:
-            st.error("Too many requests (HTTP 429). Please try again later.")
-        else:
-            st.error(f"HTTP error occurred: {str(e)}")
-        return product_id, [sku_id_url] if sku_id_url else [], default_sku_id, [], None
+            st.warning("Too many requests (429). Please try again later.")
     except requests.Timeout:
         st.error("Request timed out. TikTok servers may be slow or unreachable.")
-        return product_id, [sku_id_url] if sku_id_url else [], default_sku_id, [], None
     except requests.RequestException as e:
         st.error(f"Error fetching page: {str(e)}")
-        return product_id, [sku_id_url] if sku_id_url else [], default_sku_id, [], None
+    st.markdown("""
+    **Troubleshooting**:
+    - Log into TikTok Shop in your browser and retry.
+    - Open the URL, select a variant, add to cart, and check the checkout URL for IDs.
+    - Use `view-source:[URL]` in your browser and search for `sku_id`, `product_id`, or `seller_id`.
+    - Contact the seller for confirmation.
+    """)
+    return product_id, [sku_id_url] if sku_id_url else [], [], [], seller_id
 
 # Input field and button
 short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/view/product/1729543202963821377?...", key="url_input")
 if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
-    product_id, sku_ids, default_sku_id, seller_id, final_url = extract_and_fill_tiktok_ids(short_url)
+    product_id, sku_ids, filled_urls, all_sku_ids, seller_id = extract_and_fill_tiktok_ids(short_url)
 
-    # Display results in a table
-    st.subheader("Extracted IDs")
-    if product_id or sku_ids or seller_id:
-        result_data = {
-            "ID Type": ["Product ID", "SKU IDs", "Seller ID"],
-            "Value": [
-                product_id or "Not found",
-                ", ".join(sku_ids) if sku_ids else "Not found",
-                seller_id or "Not found"
-            ]
-        }
-        st.table(result_data)
+    # Display results
+    st.subheader("Results")
+    if product_id:
+        st.write(f"**Product ID**: {product_id}")
     else:
-        st.warning("No IDs found in the provided URL or page source.")
+        st.warning("**Product ID**: Not found in URL or page source.")
 
-    # Generate and display checkout URLs
-    filled_urls = []
-    if product_id and default_sku_id and seller_id:
-        st.subheader("Checkout URLs")
+    if seller_id:
+        st.write(f"**Seller ID**: {seller_id}")
+    else:
+        st.warning("**Seller ID**: Not found in URL or page source. Checkout URLs may be incomplete.")
+
+    if sku_ids:
+        st.write(f"**Unique SKU IDs Found**: {', '.join(sku_ids)}")
         if len(sku_ids) > 1:
-            st.info("Multiple unique SKU IDs detected (likely variants like color or style). Listing all checkout URLs.")
-            for idx, sku_id in enumerate(sku_ids, 1):
-                filled_url = CHECKOUT_URL_TEMPLATE.format(seller_id).replace('sku_id=[]', f'sku_id={sku_id}').replace('product_id=[]', f'product_id={product_id}')
-                filled_urls.append(filled_url)
-                st.write(f"**Checkout URL for SKU ID {sku_id} (Variant {idx})**:")
+            st.info("Multiple unique SKU IDs detected (likely variants like color or style).")
+    elif sku_id_url:
+        st.write(f"**SKU ID (from URL)**: {sku_id_url}")
+    else:
+        st.warning("**SKU ID**: Not found in page source or URL.")
+
+    # Display checkout URLs
+    if filled_urls:
+        st.subheader("Filled Checkout URLs")
+        if len(filled_urls) > 1:
+            for idx, filled_url in enumerate(filled_urls, 1):
+                st.write(f"**Checkout URL for SKU ID {sku_ids[idx-1]} (Variant {idx})**:")
                 st.markdown(f'<a href="{filled_url}" target="_blank">Click here to open checkout URL for Variant {idx}</a>', unsafe_allow_html=True)
-                if st.button(f"Copy URL for Variant {idx}", key=f"copy_{idx}"):
-                    st.write(f"Copied: {filled_url}")
-                    # Note: Streamlit doesn't natively support clipboard copying; consider JavaScript injection or external libraries
                 st.code(filled_url, language="text")
         else:
-            filled_url = CHECKOUT_URL_TEMPLATE.format(seller_id).replace('sku_id=[]', f'sku_id={default_sku_id}').replace('product_id=[]', f'product_id={product_id}')
-            filled_urls.append(filled_url)
-            st.write(f"**Checkout URL for SKU ID {default_sku_id}**:")
-            st.markdown(f'<a href="{filled_url}" target="_blank">Click here to open checkout URL</a>', unsafe_allow_html=True)
-            if st.button("Copy URL", key="copy_single"):
-                st.write(f"Copied: {filled_url}")
-            st.code(filled_url, language="text")
-            if default_sku_id == product_id:
+            st.write(f"**Checkout URL for SKU ID {sku_ids[0] if sku_ids else product_id}**:")
+            st.markdown(f'<a href="{filled_urls[0]}" target="_blank">Click here to open checkout URL</a>', unsafe_allow_html=True)
+            st.code(filled_urls[0], language="text")
+            if sku_ids and sku_ids[0] == product_id:
                 st.info("SKU ID matches Product ID (likely a single-variant product).")
-            if default_sku_id == "1729648752805187592":
+            if sku_ids and sku_ids[0] == "1729648752805187592":
                 st.success("Confirmed: SKU ID matches previously provided value 1729648752805187592.")
+    elif product_id and (sku_ids or sku_id_url):
+        st.subheader("Partially Filled Checkout URL")
+        default_sku_id = sku_id_url or (sku_ids[0] if sku_ids else product_id)
+        partial_url = CHECKOUT_URL_TEMPLATE.format("[SELLER_ID]").replace('sku_id=[]', f'sku_id={default_sku_id}').replace('product_id=[]', f'product_id={product_id}')
+        st.code(partial_url, language="text")
+        st.warning("Seller ID missing. Manually verify via checkout or contact the seller.")
     else:
-        st.error("Cannot generate checkout URLs: Missing Product ID, SKU ID, or Seller ID.")
-        if product_id and default_sku_id:
-            partial_url = CHECKOUT_URL_TEMPLATE.format("[SELLER_ID]").replace('product_id=[]', f'product_id={product_id}').replace('sku_id=[]', f'sku_id={default_sku_id}')
-            st.write("**Partially Filled Checkout URL** (missing Seller ID):")
-            st.code(partial_url, language="text")
-            st.warning("Seller ID missing. Manually verify via checkout or contact the seller.")
-
-    # Error guidance
-    if not seller_id or not sku_ids:
-        st.markdown("""
-        **Troubleshooting**:
-        - TikTok may require authentication, JavaScript rendering, or block automated requests.
-        - **Try**:
-          1. Log into TikTok Shop in your browser and retry.
-          2. Open the URL, select a variant, add to cart, and check the checkout URL for IDs.
-          3. Use `view-source:[URL]` in your browser and search for `sku_id`, `product_id`, or `seller_id`.
-          4. Contact the seller for confirmation.
-        """)
+        st.error("Cannot generate checkout URLs: Missing required IDs.")
 
 # Collapsible manual instructions
 with st.expander("Manual Instructions for Products with Variants and Seller ID"):
     st.markdown("""
     If the app cannot fetch all **unique SKU IDs**, **Seller ID**, or you need a specific variant (e.g., color, style):
     1. **Resolve Product URL**:
-       - Open the URL (e.g., https://www.tiktok.com/view/product/1729543202963821377?...) in Chrome or Safari on your phone.
+       - Open the URL (e.g., https://www.tiktok.com/view/product/1729543202963821377?...) in Chrome or Safari.
        - Note the final URL if it redirects.
     2. **Find Product ID**:
        - Look for `/product/[number]` in the URL (e.g., `1729543202963821377` is the **Product ID**).
     3. **Find SKU ID and Seller ID for Each Variant**:
        - Open the product page in the TikTok app or browser.
-       - Select each variant (e.g., different figure designs for the blind box), tap "Add to Cart" or "Buy Now," and proceed to checkout.
+       - Select each variant, tap "Add to Cart" or "Buy Now," and proceed to checkout.
        - Copy the checkout URL for each variant, which includes `sku_id=[number]`, `product_id=[number]`, and `seller_id=[number]`.
        - Example: `sku_id=1729543202963821500&product_id=1729543202963821377&seller_id=7415239471370036742`.
     4. **Fill Checkout URL**:
-       - Replace `sku_id=[]`, `product_id=[]`, and `seller_id={}` in the template for each variant:
+       - Replace `sku_id=[]`, `product_id=[]`, and `seller_id={}` in the template:
          ```
          https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=1&seller_id=[SELLER_ID]
          ```
     5. **View Page Source (Alternative)**:
        - Type `view-source:[final URL]` in your browser.
-       - Search for `sku_id`, `product_id`, or `seller_id` to find IDs (e.g., `sku_id":"1729543202963821500"`).
+       - Search for `sku_id`, `product_id`, or `seller_id` to find IDs.
     6. **Contact Seller**:
        - Message the seller via the product page to confirm the **SKU ID** and **Seller ID** for each variant.
     """)
