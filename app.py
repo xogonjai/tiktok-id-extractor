@@ -17,11 +17,8 @@ Supported URLs: `https://www.tiktok.com/view/product/1729543202963821377?...`.
 # Checkout URL template
 CHECKOUT_URL_TEMPLATE = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[]&product_id=[]&quantity=1&seller_id={}"
 
-# Toggle for playwright (for dynamic content)
-use_playwright = st.checkbox("Use Playwright for dynamic content (requires installation)", value=False)
-
 # Function to extract IDs
-def extract_and_fill_tiktok_ids(short_url, use_playwright=False):
+def extract_and_fill_tiktok_ids(short_url):
     if not short_url:
         st.warning("Please enter a valid TikTok Shop URL.")
         return None, [], [], None, None
@@ -41,28 +38,15 @@ def extract_and_fill_tiktok_ids(short_url, use_playwright=False):
 
         # Fetch page content
         with st.spinner("Fetching TikTok Shop data..."):
-            if use_playwright:
-                try:
-                    from playwright.sync_api import sync_playwright
-                    with sync_playwright() as p:
-                        browser = p.chromium.launch()
-                        page = browser.new_page()
-                        page.goto(short_url)
-                        text = page.content()
-                        browser.close()
-                except ImportError:
-                    st.error("Playwright not installed. Run `pip install playwright` and `playwright install`.")
-                    return None, [], [], None, None
-            else:
-                session = requests.Session()
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-                }
-                response = session.get(short_url, headers=headers, allow_redirects=True, timeout=10)
-                response.raise_for_status()
-                final_url = response.url
-                text = response.text
+            session = requests.Session()
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+            }
+            response = session.get(short_url, headers=headers, allow_redirects=True, timeout=10)
+            response.raise_for_status()
+            final_url = response.url
+            text = response.text
 
         # Extract Product ID from URL
         product_id_match = re.search(r'/product/(\d+)', final_url)
@@ -117,10 +101,10 @@ def extract_and_fill_tiktok_ids(short_url, use_playwright=False):
     except requests.HTTPError as e:
         st.error(f"HTTP error occurred: {str(e)}")
         if e.response.status_code == 403:
-            st.warning("Access denied (403). TikTok may require authentication or block automated requests. Try enabling Playwright.")
+            st.warning("Access denied (403). TikTok may require authentication or block automated requests.")
         elif e.response.status_code == 429:
             st.warning("Too many requests (429). Please try again later.")
-        st.info("Try opening the URL in a browser, adding the product to cart, and checking the checkout URL for `seller_id`. Alternatively, use `view-source:[URL]` to search for `seller_id`.")
+        st.info("Try opening the URL in a browser, adding the product to cart, and checking the checkout URL for `seller_id`. Alternatively, use `view-source:[URL]` to search for `seller_id`, `shop_id`, or `merchant_id`.")
         if 'text' in locals():
             st.code(text[:1000], language="html")  # Debug: Show page source sample
     except requests.Timeout:
@@ -141,7 +125,7 @@ def extract_and_fill_tiktok_ids(short_url, use_playwright=False):
 # Input field and button
 short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/view/product/1729543202963821377?...", key="url_input")
 if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
-    product_id, sku_ids, filled_urls, default_sku_id, seller_id = extract_and_fill_tiktok_ids(short_url, use_playwright)
+    product_id, sku_ids, filled_urls, default_sku_id, seller_id = extract_and_fill_tiktok_ids(short_url)
 
     # Display results
     st.subheader("Results")
@@ -211,23 +195,7 @@ with st.expander("Manual Instructions for Products with Variants"):
          https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=1&seller_id=[SELLER_ID]
          ```
     5. **View Page Source (Alternative)**:
-       - Type `view-source:[final URL]` in your browser.
+       - Type `view-source:[URL]` in your browser.
        - Search for `sku_id`, `product_id`, `seller_id`, `shop_id`, or `merchant_id`.
     6. **Contact Seller**:
-       - Message the seller via the product page to confirm **SKU ID** and **Seller ID**.
-    """)
-
-# Optional: Headless browser integration (commented out, requires `playwright` installation)
-"""
-# Requires: pip install playwright; playwright install
-from playwright.sync_api import sync_playwright
-def extract_with_playwright(url):
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.goto(url)
-        text = page.content()
-        browser.close()
-        return text
-# Replace `response.text` with `extract_with_playwright(short_url)` in the try block if needed.
-"""
+       - Message the seller via the product page
