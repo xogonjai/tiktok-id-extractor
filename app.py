@@ -12,21 +12,24 @@ st.markdown("""
 Enter a TikTok Shop product URL to extract the **Product ID**, **unique SKU IDs** (for variants like color or style), **Seller ID**, and **variant prices**.  
 The app generates a clickable checkout URL for **each unique SKU ID** (no duplicates) using the **Seller ID** from the URL or page source.  
 Supported URLs: `https://www.tiktok.com/view/product/1729543202963821377?...`.  
-**Note**: Prices may be dynamic (loaded via JavaScript) and may not always be extracted. If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown. Use manual instructions if needed.
+**Note**: Prices and IDs may be dynamic (loaded via JavaScript) and may not always be extracted. If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown. Use manual instructions if needed.
 """)
 
 # Checkout URL template
 CHECKOUT_URL_TEMPLATE = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[]&product_id=[]&quantity=1&seller_id={}"
 
+# Toggle for playwright (for dynamic content)
+use_playwright = st.checkbox("Use Playwright for dynamic content (requires installation)", value=False)
+
 # Function to extract IDs and prices
-def extract_and_fill_tiktok_ids(short_url):
+def extract_and_fill_tiktok_ids(short_url, use_playwright=False):
     if not short_url:
         st.warning("Please enter a valid TikTok Shop URL.")
         return None, [], [], None, None, {}
 
     # Basic URL validation
     if not short_url.startswith(('http://', 'https://')) or 'tiktok.com' not in short_url:
-        st.error("Invalid URL. Please provide a TikTok Shop URL (e.g., https://www.tiktok.com/view/product/...).")
+        st.error("Invalid URL. Please HannahPlease provide a TikTok Shop URL (e.g., https://www.tiktok.com/view/product/...).")
         return None, [], [], None, None, {}
 
     try:
@@ -38,19 +41,30 @@ def extract_and_fill_tiktok_ids(short_url):
         filled_urls = []
         sku_prices = {}  # Dictionary to store SKU ID -> price mapping
 
-        # Set headers to mimic a mobile browser
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
-        }
-
         # Fetch page content
         with st.spinner("Fetching TikTok Shop data..."):
-            session = requests.Session()
-            response = session.get(short_url, headers=headers, allow_redirects=True, timeout=10)
-            response.raise_for_status()
-            final_url = response.url
-            text = response.text
+            if use_playwright:
+                try:
+                    from playwright.sync_api import sync_playwright
+                    with sync_playwright() as p:
+                        browser = p.chromium.launch()
+                        page = browser.new_page()
+                        page.goto(short_url)
+                        text = page.content()
+                        browser.close()
+                except ImportError:
+                    st.error("Playwright not installed. Run `pip install playwright` and `playwright install`.")
+                    return None, [], [], None, None, {}
+            else:
+                session = requests.Session()
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+                }
+                response = session.get(short_url, headers=headers, allow_redirects=True, timeout=10)
+                response.raise_for_status()
+                final_url = response.url
+                text = response.text
 
         # Extract Product ID from URL
         product_id_match = re.search(r'/product/(\d+)', final_url)
@@ -79,13 +93,13 @@ def extract_and_fill_tiktok_ids(short_url):
 
         # Search for Seller ID in page source (if not in URL)
         if not seller_id:
-            seller_id_pattern = r'(?:"seller_id"|"sellerId")\s*:\s*"(\d+)"'
+            seller_id_pattern = r'(?:"seller_id"|"sellerId"|"shop_id"|"merchant_id")\s*:\s*"(\d+)"'
             seller_id_match = re.search(seller_id_pattern, text)
             if seller_id_match:
                 seller_id = seller_id_match.group(1)
             else:
                 st.warning("Seller ID not found in page source. Showing sample for debugging:")
-                st.code(text[:500], language="html")  # Debug: Show first 500 characters
+                st.code(text[:1000], language="html")  # Debug: Show first 1000 characters
 
         # Extract price data (try to find JSON with sku_list)
         try:
@@ -128,12 +142,12 @@ def extract_and_fill_tiktok_ids(short_url):
     except requests.HTTPError as e:
         st.error(f"HTTP error occurred: {str(e)}")
         if e.response.status_code == 403:
-            st.warning("Access denied (403). TikTok may require authentication or block automated requests.")
+            st.warning("Access denied (403). TikTok may require authentication or block automated requests. Try enabling Playwright.")
         elif e.response.status_code == 429:
             st.warning("Too many requests (429). Please try again later.")
         st.info("Try opening the URL in a browser, adding the product to cart, and checking the checkout URL for `seller_id`. Alternatively, use `view-source:[URL]` to search for `seller_id`.")
         if 'text' in locals():
-            st.code(text[:500], language="html")  # Debug: Show page source sample
+            st.code(text[:1000], language="html")  # Debug: Show page source sample
     except requests.Timeout:
         st.error("Request timed out. TikTok servers may be slow or unreachable.")
     except requests.RequestException as e:
@@ -152,7 +166,7 @@ def extract_and_fill_tiktok_ids(short_url):
 # Input field and button
 short_url = st.text_input("TikTok Shop URL:", placeholder="e.g., https://www.tiktok.com/view/product/1729543202963821377?...", key="url_input")
 if st.button("Extract IDs, Prices, and Fill Checkout URLs", key="extract_button"):
-    product_id, sku_ids, filled_urls, default_sku_id, seller_id, sku_prices = extract_and_fill_tiktok_ids(short_url)
+    product_id, sku_ids, filled_urls, default_sku_id, seller_id, sku_prices = extract_and_fill_tiktok_ids(short_url, use_playwright)
 
     # Display results
     st.subheader("Results")
@@ -183,7 +197,7 @@ if st.button("Extract IDs, Prices, and Fill Checkout URLs", key="extract_button"
         st.info("Prices may vary due to promotions or user-specific discounts. Verify on the TikTok Shop page.")
         st.markdown("[See Reddit discussion for more details](https://www.reddit.com/r/TikTokshop/comments/1ffjzhe/tiktok_shop_prices_change_in_cart_please_help/)")
     else:
-        st.warning("No price data found. Prices may be loaded dynamically via JavaScript. Try selecting a variant and checking the checkout page.")
+        st.warning("No price data found. Prices may be loaded dynamically via JavaScript. Try enabling Playwright or checking the checkout page.")
 
     # Display checkout URLs
     if filled_urls:
@@ -233,12 +247,8 @@ with st.expander("Manual Instructions for Products with Variants and Prices"):
          ```
     5. **View Page Source (Alternative)**:
        - Type `view-source:[final URL]` in your browser.
-       - Search for `sku_id`, `product_id`, `seller_id`, or `price` (e.g., `sku_list` or `sale_price`).
+       - Search for `sku_id`, `product_id`, `seller_id`, `shop_id`, `merchant_id`, or `price` (e.g., `sku_list` or `sale_price`).
     6. **Contact Seller**:
        - Message the seller via the product page to confirm **SKU ID**, **Seller ID**, and **prices** for each variant.
     **Note**: Prices may vary due to promotions or user-specific discounts. Check the TikTok Shop page directly.
     """)
-
-# Optional: Headless browser integration (commented out, requires `playwright` installation)
-"""
-# Requires: pip install playwright
