@@ -14,8 +14,8 @@ Supported URLs: `https://www.tiktok.com/view/product/1729543202963821377?...`.
 **Note**: If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown. Use manual instructions if needed.
 """)
 
-# Checkout URL template (quantity is now a placeholder)
-CHECKOUT_URL_TEMPLATE = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[]&product_id=[]&quantity={quantity}&seller_id={}"
+# Checkout URL base
+CHECKOUT_URL_BASE = "https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card"
 
 # Function to extract IDs
 def extract_and_fill_tiktok_ids(short_url):
@@ -92,11 +92,11 @@ def extract_and_fill_tiktok_ids(short_url):
             if len(sku_ids) > 1:
                 for sku_id in sku_ids:
                     for qty in quantities:
-                        filled_url = CHECKOUT_URL_TEMPLATE.format(quantity=qty, seller_id=seller_id).replace('sku_id=[]', f'sku_id={sku_id}').replace('product_id=[]', f'product_id={product_id}')
+                        filled_url = f"{CHECKOUT_URL_BASE}&sku_id={sku_id}&product_id={product_id}&quantity={qty}&seller_id={seller_id}"
                         filled_urls.append((sku_id, qty, filled_url))
             else:
                 for qty in quantities:
-                    filled_url = CHECKOUT_URL_TEMPLATE.format(quantity=qty, seller_id=seller_id).replace('sku_id=[]', f'sku_id={default_sku_id}').replace('product_id=[]', f'product_id={product_id}')
+                    filled_url = f"{CHECKOUT_URL_BASE}&sku_id={default_sku_id}&product_id={product_id}&quantity={qty}&seller_id={seller_id}"
                     filled_urls.append((default_sku_id, qty, filled_url))
 
         return product_id, sku_ids, filled_urls, default_sku_id, seller_id
@@ -183,7 +183,7 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
         st.subheader("Partially Filled Checkout URL")
         quantities = [1, 2, 6]
         for qty in quantities:
-            partial_url = CHECKOUT_URL_TEMPLATE.format(quantity=qty, seller_id="[SELLER_ID]").replace('sku_id=[]', f'sku_id={default_sku_id}').replace('product_id=[]', f'product_id={product_id}')
+            partial_url = f"{CHECKOUT_URL_BASE}&sku_id={default_sku_id}&product_id={product_id}&quantity={qty}&seller_id=[SELLER_ID]"
             st.code(partial_url, language="text")
         st.warning("Seller ID missing. Manually verify via checkout or contact the seller.")
     else:
@@ -204,7 +204,7 @@ with st.expander("Manual Instructions for Products with Variants"):
            - Copy the checkout URL, which includes `sku_id=[number]`, `product_id=[number]`, and `seller_id=[number]`.
            - Example: `sku_id=1729543202963821500&product_id=1729543202963821377&seller_id=7415239471370036742`.
         4. **Fill Checkout URL**:
-           - Replace `sku_id=[]`, `product_id=[]`, `quantity={quantity}`, and `seller_id={}` in the template:
+           - Use this template and replace the placeholders:
              ```
              https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=[QUANTITY]&seller_id=[SELLER_ID]
              ```
