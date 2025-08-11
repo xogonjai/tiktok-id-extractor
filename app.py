@@ -11,7 +11,7 @@ st.markdown("""
 Enter a TikTok Shop product URL to extract the **Product ID**, **unique SKU IDs** (for variants like color or style), and **Seller ID**.  
 The app identifies whether the product has a **Single Variant** (one SKU) or a **Set of Variants** (multiple SKUs) and generates a clickable checkout URL for each unique SKU ID.  
 Supported URLs: `https://www.tiktok.com/view/product/1729543202963821377?...`.  
-**Note**: If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown. Use manual instructions if needed.
+**Note**: If multiple SKU IDs or no Seller ID is found, all checkout URLs are listed or a warning is shown.
 """)
 
 # Checkout URL base
@@ -107,13 +107,6 @@ def extract_and_fill_tiktok_ids(short_url):
             st.warning("Access denied (403). TikTok may require authentication or block automated requests. Try a different browser or device.")
         elif e.response.status_code == 429:
             st.warning("Too many requests (429). Please try again later.")
-        st.info("""
-            Try these steps:
-            - Open the URL in a browser, add the product to cart, and check the checkout URL for `seller_id`.
-            - Use `view-source:[URL]` in your browser and search for `seller_id`, `shop_id`, `merchant_id`, or `store_id`.
-            - Log into TikTok Shop and retry the URL.
-            - Contact the seller for confirmation.
-        """)
         if 'text' in locals():
             st.code(text[:1500], language="html")  # Debug: Show page source sample
         return None, [], [], None, None
@@ -143,13 +136,6 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
         st.write(f"**Seller ID**: {seller_id}")
     else:
         st.warning("**Seller ID**: Not found in URL or page source. Checkout URLs may be incomplete.")
-        st.info("""
-            Try these steps:
-            - Open the URL in a browser, add the product to cart, and check the checkout URL for `seller_id`.
-            - Use `view-source:[URL]` in your browser and search for `seller_id`, `shop_id`, `merchant_id`, or `store_id`.
-            - Log into TikTok Shop and retry the URL.
-            - Contact the seller for confirmation.
-        """)
 
     if sku_ids:
         st.write(f"**Unique SKU IDs Found**: {', '.join(sku_ids)}")
@@ -188,29 +174,3 @@ if st.button("Extract IDs and Fill Checkout URLs", key="extract_button"):
         st.warning("Seller ID missing. Manually verify via checkout or contact the seller.")
     else:
         st.error("Cannot generate checkout URLs: Missing required IDs.")
-
-# Collapsible manual instructions
-with st.expander("Manual Instructions for Products with Variants"):
-    st.markdown("""
-        If the app cannot fetch **unique SKU IDs** or **Seller ID**:
-        1. **Resolve Product URL**:
-           - Open the URL (e.g., https://www.tiktok.com/view/product/1729543202963821377?...) in Chrome or Safari.
-           - Note the final URL if it redirects.
-        2. **Find Product ID**:
-           - Look for `/product/[number]` in the URL (e.g., `1729543202963821377` is the **Product ID**).
-        3. **Find SKU ID and Seller ID**:
-           - Open the product page in the TikTok app or browser.
-           - Select each variant (e.g., color, style), tap "Add to Cart" or "Buy Now," and proceed to checkout.
-           - Copy the checkout URL, which includes `sku_id=[number]`, `product_id=[number]`, and `seller_id=[number]`.
-           - Example: `sku_id=1729543202963821500&product_id=1729543202963821377&seller_id=7415239471370036742`.
-        4. **Fill Checkout URL**:
-           - Use this template and replace the placeholders:
-             ```
-             https://www.tiktok.com/view/fe_tiktok_ecommerce_in_web/order_submit/index.html?enter_from=product_card&enter_method=product_card&sku_id=[SKU_ID]&product_id=[PRODUCT_ID]&quantity=[QUANTITY]&seller_id=[SELLER_ID]
-             ```
-        5. **View Page Source (Alternative)**:
-           - Type `view-source:[URL]` in your browser.
-           - Search for `sku_id`, `product_id`, `seller_id`, `shop_id`, `merchant_id`, or `store_id`.
-        6. **Contact Seller**:
-           - Message the seller via the product page to confirm **SKU ID** and **Seller ID**.
-    """)
